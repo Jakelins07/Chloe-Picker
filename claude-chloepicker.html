@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>What Does Chloe Want?</title>
+<style>
+:root{--bg:#c8500e;--ink:#ffffff;--card:#111111;--accent:#3a2a8c;--accent-ink:#ffffff;--muted:#ffd9bf;--line:#4a4a4a;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Trebuchet MS",Verdana,system-ui,sans-serif;line-height:1.5}
+main{max-width:520px;margin:0 auto;padding:28px 18px 40px}
+h1{font-size:1.7rem;margin:0 0 18px}
+.sub{color:var(--muted);margin:0 0 22px}
+.result{background:var(--card);border:2px solid var(--line);border-radius:16px;min-height:150px;display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;font-size:2rem;font-weight:700;overflow-wrap:anywhere}
+.result.empty{font-size:1.1rem;font-weight:400;color:var(--muted)}
+.result[hidden]{display:none}
+.result{margin-bottom:10px}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px}
+button:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.pick{width:100%;margin:14px 0 10px;padding:44px 16px;background:var(--accent);color:var(--accent-ink);font-size:2.8rem;font-weight:800;letter-spacing:.04em}
+.pick:disabled{opacity:.5;cursor:not-allowed}
+.skip{width:100%;padding:12px;background:var(--card);color:var(--ink);border:2px solid var(--line);font-weight:700}
+.link{background:none;color:var(--ink);text-decoration:underline;padding:0}
+h2{font-size:1.05rem;margin:28px 0 10px}
+.add{display:flex;gap:8px;margin-bottom:12px}
+input{flex:1;min-width:0;font:inherit;padding:11px 12px;border-radius:10px;border:2px solid var(--line);background:var(--card);color:var(--ink)}
+.add button{padding:0 18px;background:var(--ink);color:var(--bg);font-weight:700}
+ul{list-style:none;margin:0;padding:0}
+li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;margin-bottom:6px;background:var(--card);border:1px solid var(--line);border-radius:10px}
+li button{background:none;color:var(--muted);font-size:1.2rem;padding:2px 8px}
+li button:hover{color:var(--ink)}
+.note{color:var(--muted);font-size:.85rem;margin-top:14px}
+</style>
+</head>
+<body>
+<main>
+  <h1>What Does Chloe Want?</h1>
+
+  <button class="pick" id="pick">PRESS ME!</button>
+  <div class="result" id="result" aria-live="polite" hidden></div>
+  <button class="skip" id="skip" hidden>Not tonight</button>
+  <p class="note" id="skipped" hidden><span id="skippedText"></span> <button class="link" id="resetSkip">Reset</button></p>
+
+  <h2>Your favorite places</h2>
+  <div class="add">
+    <input id="name" type="text" placeholder="Add a place, like Joe's Pizza" maxlength="60" aria-label="Place name">
+    <button id="addBtn">Add</button>
+  </div>
+  <ul id="list"></ul>
+  <p class="note">Your list is saved in this browser on this device. "Not tonight" skips reset when you reload the page.</p>
+</main>
+
+<script>
+var KEY = "foodPlaces2";
+var places = ["Taco Bell", "Wingstop", "McDonald's", "Wendy's", "Burger King", "Chipotle", "Cabo", "Chili's", "Outback", "Miller's", "Hibachi", "IHOP", "Subway", "Tropical Smoothie", "Friendly's"];
+try {
+  var saved = localStorage.getItem(KEY);
+  if (saved) places = JSON.parse(saved);
+} catch (e) {}
+
+var listEl = document.getElementById("list");
+var resultEl = document.getElementById("result");
+var pickBtn = document.getElementById("pick");
+var nameEl = document.getElementById("name");
+var skipBtn = document.getElementById("skip");
+var skippedEl = document.getElementById("skipped");
+var skippedText = document.getElementById("skippedText");
+var last = null;
+var skipped = [];
+
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(places)); } catch (e) {}
+}
+
+function render() {
+  listEl.innerHTML = "";
+  places.forEach(function (p, i) {
+    var li = document.createElement("li");
+    var span = document.createElement("span");
+    span.textContent = p;
+    var del = document.createElement("button");
+    del.textContent = "\u00d7";
+    del.setAttribute("aria-label", "Remove " + p);
+    del.onclick = function () { places.splice(i, 1); save(); render(); };
+    li.appendChild(span);
+    li.appendChild(del);
+    listEl.appendChild(li);
+  });
+  pickBtn.disabled = places.length === 0;
+  renderSkipped();
+}
+
+function renderSkipped() {
+  skipped = skipped.filter(function (p) { return places.indexOf(p) !== -1; });
+  skippedEl.hidden = skipped.length === 0;
+  skippedText.textContent = "Skipped tonight: " + skipped.join(", ");
+}
+
+function addPlace() {
+  var v = nameEl.value.trim();
+  if (!v) return;
+  places.push(v);
+  nameEl.value = "";
+  save();
+  render();
+}
+
+function getPool() {
+  var open = places.filter(function (p) { return skipped.indexOf(p) === -1; });
+  var fresh = open.filter(function (p) { return p !== last; });
+  return fresh.length ? fresh : open;
+}
+
+function pick() {
+  var pool = getPool();
+  if (!pool.length) {
+    resultEl.hidden = false;
+    resultEl.classList.add("empty");
+    resultEl.textContent = "Everything is skipped tonight. Reset the skipped list to pick again.";
+    skipBtn.hidden = true;
+    return;
+  }
+  var choice = pool[Math.floor(Math.random() * pool.length)];
+  pickBtn.disabled = true;
+  skipBtn.hidden = true;
+  resultEl.hidden = false;
+  resultEl.classList.remove("empty");
+  var count = 0;
+  var timer = setInterval(function () {
+    resultEl.textContent = pool[Math.floor(Math.random() * pool.length)];
+    count++;
+    if (count > 12) {
+      clearInterval(timer);
+      resultEl.textContent = "\ud83c\udf74 " + choice;
+      last = choice;
+      skipBtn.hidden = false;
+      pickBtn.disabled = false;
+    }
+  }, 80);
+}
+
+document.getElementById("addBtn").onclick = addPlace;
+nameEl.addEventListener("keydown", function (e) { if (e.key === "Enter") addPlace(); });
+pickBtn.onclick = pick;
+skipBtn.onclick = function () {
+  if (last && skipped.indexOf(last) === -1) skipped.push(last);
+  renderSkipped();
+  pick();
+};
+document.getElementById("resetSkip").onclick = function () {
+  skipped = [];
+  renderSkipped();
+};
+render();
+</script>
+</body>
+</html>
